@@ -1,6 +1,3 @@
-extern crate timer;
-extern crate chrono;
-
 use std::{net::UdpSocket, time::Duration};
 
 use crate::protocol::packets::{ack::Ack, packet::Packet};
