@@ -1,6 +1,6 @@
 use std::{net::UdpSocket, time::Duration};
 
-use crate::protocol::packets::{ack::Ack, packet::Packet};
+use crate::protocol::packets::packet::Packet;
 
 const MAX_SIZE: usize = 2560;
 
@@ -32,7 +32,7 @@ impl Client {
         );
         let sub = offset..offset+size_sending;
         let buf = content[sub].to_vec();
-        let packet = Packet::new(buf, self.next_send);
+        let packet = Packet::new_data(buf, self.next_send);
         self.next_send = self.next_send + (size_sending as u64);
         println!("Sending packets with bytes from {} to {}", packet.get_sequence(), packet.get_sequence()+packet.get_size());
         self.in_flight += size_sending as u64;
@@ -45,7 +45,7 @@ impl Client {
         let amt = self.socket.recv(&mut buf);
         match amt{
             Ok(amt) => {
-                let ack = Ack::from_bytes(buf[..amt].to_vec());
+                let ack = Packet::from_bytes(buf[..amt].to_vec());
                 println!("{:?}", ack);
                 if ack.get_acked() > self.sequence{
                     self.in_flight -= ack.get_acked() - self.sequence;
@@ -61,10 +61,39 @@ impl Client {
         Ok(())
     }
 
+    fn connect(&mut self) -> Result<bool, std::io::Error>{
+        let syn = Packet::new_syn(self.sequence);
+
+        self.socket.send(&syn.to_bytes())?;
+
+        let mut buf = [0; 2560];
+        let amt = self.socket.recv(&mut buf)?;
+
+        let synack = Packet::from_bytes(buf[..amt].to_vec());
+
+        if !synack.is_syn() || !synack.is_ack() || self.sequence + 1 != synack.get_acked(){
+            return Ok(false);
+        }
+
+        self.sequence += 1;
+        self.next_send += 1;
+        self.ack += 1;
+
+        let ack = Packet::new_ack(self.sequence, synack.get_sequence()+1);
+
+        self.socket.send(&ack.to_bytes())?;
+
+        Ok(true)
+    }
+
     /**
      * Go-back-n implementation of sending packets
      */
     pub fn send(&mut self, content : Vec<u8>) -> Result<(), std::io::Error>{
+        while !self.connect().unwrap(){
+
+        }
+        println!("Done handshake");
         let init_sequence: u64 = self.sequence;
         let len = content.len() as u64;
         while self.sequence < init_sequence + len{
@@ -74,6 +103,8 @@ impl Client {
             }
             self.wait_ack()?;
         }
+        let reset = Packet::new_reset(self.sequence);
+        self.socket.send(&reset.to_bytes())?;
         Ok(())
     }
 }
