@@ -1,4 +1,6 @@
 pub mod protocol;
+use std::sync::mpsc::channel;
+
 use protocol::protocol::Protocol;
 
 fn main() -> Result<(), std::io::Error>{
@@ -11,8 +13,13 @@ fn main() -> Result<(), std::io::Error>{
         msg[i] = b'a';
     }
 
-    client.send(msg.to_vec(), "127.0.0.1:8080".to_string())?;
+    let addr = "127.0.0.1:8080".to_string();
+
+    client.connect(addr.clone())?;
+    client.send(msg.to_vec(), addr.clone())?;
     // client.send(msg.to_vec())?;
+
+    client.close(addr)?;
     
     Ok(())
 }

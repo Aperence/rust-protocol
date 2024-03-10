@@ -2,6 +2,8 @@ use std::{collections::HashMap, net::UdpSocket, sync::mpsc::Sender, thread, time
 use std::hash::{DefaultHasher, Hash, Hasher};
 use rand::{self, random};
 
+use std::io::{Error, ErrorKind};
+
 use crate::protocol::packets::packet::Packet;
 use crate::protocol::connection::connection::{Connection, MAX_SIZE};
 
@@ -14,7 +16,6 @@ fn hash<T: Hash>(t: &T) -> u64 {
 pub struct Protocol{
     socket : UdpSocket,
     connections : HashMap<String, Connection>
-
 }
 
 
@@ -65,28 +66,31 @@ impl Protocol{
         Ok(())
     }
 
-    fn connect(&mut self, addr : String) -> Result<bool, std::io::Error>{
-        let seq : u16 = random(); // random between 0 and 64000
-        let seq = seq as u64;
-        let syn = Packet::new_syn(seq);
-        self.socket.send_to(&syn.to_bytes(), addr.clone())?;
-        println!("Sent syn");
-
-
-        let mut buf = [0; 2560];
-        let amt = self.socket.recv(&mut buf)?;
-        println!("Received synack");
-        let synack = Packet::from_bytes(buf[..amt].to_vec());
-        if !synack.is_syn() || !synack.is_ack() || seq + 1 != synack.get_acked(){
-            return Ok(false);
+    pub fn connect(&mut self, addr : String) -> Result<bool, std::io::Error>{
+        loop {
+            let seq : u16 = random(); // random between 0 and 64000
+            let seq = seq as u64;
+            let syn = Packet::new_syn(seq);
+            self.socket.send_to(&syn.to_bytes(), addr.clone())?;
+            println!("Sent syn");
+    
+    
+            let mut buf = [0; 2560];
+            let amt = self.socket.recv(&mut buf)?;
+            println!("Received synack");
+            let synack = Packet::from_bytes(buf[..amt].to_vec());
+            if !synack.is_syn() || !synack.is_ack() || seq + 1 != synack.get_acked(){
+                continue;
+            }
+            let connection = Connection::new(seq+1, synack.get_sequence()+1);
+     
+            let ack = Packet::new_ack(connection.sequence, synack.get_sequence()+1);
+            self.socket.send_to(&ack.to_bytes(), addr.clone())?;
+    
+            self.connections.insert(addr, connection);
+    
+            break;
         }
-        let connection = Connection::new(seq+1, synack.get_acked()+1);
- 
-        let ack = Packet::new_ack(connection.sequence, synack.get_sequence()+1);
-        self.socket.send_to(&ack.to_bytes(), addr.clone())?;
-
-        self.connections.insert(addr, connection);
-
         Ok(true)
     }
 
@@ -94,7 +98,10 @@ impl Protocol{
      * Go-back-n implementation for sending packets
      */
     pub fn send(&mut self, content : Vec<u8>, addr : String) -> Result<(), std::io::Error>{
-        while !self.connect(addr.clone()).unwrap(){}
+        if !self.connections.contains_key(&addr){
+            return Err(Error::new(ErrorKind::NotConnected, "Expected to first connect before sending content"));
+        }
+        
         println!("Done handshake");
         
         let len = content.len() as u64;
@@ -129,6 +136,10 @@ impl Protocol{
             }
             self.wait_ack(addr.clone())?;
         }
+        Ok(())
+    }
+
+    pub fn close(&self, addr : String) -> Result<(), std::io::Error>{
         let connection = self.connections.get(&addr).unwrap();
         let reset = Packet::new_reset(connection.sequence);
         self.socket.send_to(&reset.to_bytes(), addr)?;
@@ -139,6 +150,7 @@ impl Protocol{
         let connection = self.connections.get_mut(&addr).unwrap();
         if packet.get_sequence() == connection.ack{
             if packet.is_reset(){
+                println!("Received reset for {}", addr);
                 self.connections.remove(&addr);
                 return Ok(());
             }
@@ -159,7 +171,7 @@ impl Protocol{
         if received.is_syn(){
             // begin handshake by sending syn-ack
             let seq = hash(&src); // use an hash to avoid syn flooding
-            let synack = Packet::new_synack(seq, received.get_acked()+1);
+            let synack = Packet::new_synack(seq, received.get_sequence()+1);
             self.socket.send_to(&synack.to_bytes(), src)?;
             return Ok(());
         }
