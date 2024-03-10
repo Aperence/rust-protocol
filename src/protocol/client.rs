@@ -31,9 +31,9 @@ impl Client {
         let sub = offset..offset+size_sending;
         let buf = content[sub].to_vec();
         let packet = Packet::new_data(buf, connection.sequence + connection.in_flight);
-        println!("Sending packets with bytes from {} to {}", packet.get_sequence(), packet.get_sequence()+packet.get_size());
         connection.in_flight += size_sending as u64;
         self.socket.send_to(&packet.to_bytes(), addr)?;
+
         Ok(())
     }
 
@@ -72,11 +72,10 @@ impl Client {
         if !synack.is_syn() || !synack.is_ack() || seq + 1 != synack.get_acked(){
             return Ok(false);
         }
-        let connection = Connection::new(seq+1, synack.get_acked()+1);
- 
+
+        let connection = Connection::new(seq+1, synack.get_sequence()+1);
         let ack = Packet::new_ack(connection.sequence, synack.get_sequence()+1);
         self.socket.send_to(&ack.to_bytes(), addr.clone())?;
-
         self.connections.insert(addr, connection);
 
         Ok(true)
@@ -120,6 +119,8 @@ impl Client {
                 }
             }
             self.wait_ack(addr.clone())?;
+            println!("Sent {}% of data", ((curr_seq - init_sequence) as f64) / (len as f64) * 100.0);
+            
         }
         let connection = self.connections.get(&addr).unwrap();
         let reset = Packet::new_reset(connection.sequence);

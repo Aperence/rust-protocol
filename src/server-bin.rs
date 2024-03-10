@@ -1,6 +1,6 @@
 pub mod protocol;
 use std::sync::mpsc::channel;
-use std::thread::{self, sleep};
+use std::thread;
 
 use protocol::protocol::Protocol;
 

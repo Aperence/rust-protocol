@@ -1,4 +1,4 @@
-use std::{collections::HashMap, net::UdpSocket, os::unix::net::SocketAddr, sync::mpsc::Sender, thread::Thread};
+use std::{collections::HashMap, net::UdpSocket, sync::mpsc::Sender, thread::Thread};
 
 use crate::protocol::packets::packet::Packet;
 use crate::protocol::connection::connection::Connection;
@@ -48,7 +48,7 @@ impl Server {
         if received.is_syn(){
             // begin handshake by sending syn-ack
             let seq = hash(&src); // use an hash to avoid syn flooding
-            let synack = Packet::new_synack(seq, received.get_acked()+1);
+            let synack = Packet::new_synack(seq, received.get_sequence()+1);
             self.socket.send_to(&synack.to_bytes(), src)?;
             return Ok(());
         }
