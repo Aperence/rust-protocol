@@ -1,43 +1,23 @@
 pub mod protocol;
-use std::sync::mpsc::channel;
+
 use std::thread;
 
-use protocol::protocol::Protocol;
-
-/*
-    TODO:
-        - send on server/receive on client
-*/
+use protocol::Protocol;
 
 fn main() -> Result<(), std::io::Error>{
     println!("Hello from server");
 
-    let server = Protocol::new("127.0.0.1:8080")?;
-    let nthreads = 8;
+    let mut server = Protocol::new("127.0.0.1:8080")?;
 
-    let mut handles = Vec::new();
-    let mut senders = Vec::new();
+    loop{
+        let mut connection = server.listen()?;
+        thread::spawn(move ||{
+            let _ = connection.send("Hello".as_bytes().to_vec());
 
-    for i in 0..nthreads{
-        let (tx, rx) = channel();
-
-        let idx = i;
-        let handle = thread::spawn(move || {
-            // some work here
-            while let Ok((addr, _data)) = rx.recv(){
-                println!("Received packet from {} in thread {}", addr, idx);
+            while let Ok(x) = connection.recv(){
+                println!("Received data of size {}", x.len());
             }
         });
-
-        handles.push(handle);
-        senders.push(tx);
     }
-
-    server.receive(senders)?;
-
-    let handle = handles.remove(0);
-    handle.join().unwrap();
-
-    //println!("{}", _received);
-    Ok(())
+    
 }
