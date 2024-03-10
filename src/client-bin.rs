@@ -1,10 +1,10 @@
 pub mod protocol;
-use protocol::client::Client;
+use protocol::protocol::Protocol;
 
 fn main() -> Result<(), std::io::Error>{
     println!("Hello from client");
 
-    let mut client = Client::new("127.0.0.1:8081")?;
+    let mut client = Protocol::new("127.0.0.1:8081")?;
 
     let mut msg : [u8; 50000] = [0; 50000];
     for i in 0..50000 {

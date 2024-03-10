@@ -2,7 +2,7 @@ pub mod protocol;
 use std::sync::mpsc::channel;
 use std::thread::{self, sleep};
 
-use protocol::server::Server;
+use protocol::protocol::Protocol;
 
 /*
     TODO:
@@ -12,7 +12,7 @@ use protocol::server::Server;
 fn main() -> Result<(), std::io::Error>{
     println!("Hello from server");
 
-    let server = Server::new("127.0.0.1:8080")?;
+    let server = Protocol::new("127.0.0.1:8080")?;
     let nthreads = 8;
 
     let mut handles = Vec::new();
