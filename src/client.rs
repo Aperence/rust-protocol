@@ -41,6 +41,8 @@ fn main() -> Result<(), std::io::Error>{
 
     // then let's send our long query
     connection.send(msg)?;
+    // note that we can also use write for this
+    // connection.write(&msg)?;
 
     // send a fin segment, meaning that we have finished transmitting
     connection.close()?;

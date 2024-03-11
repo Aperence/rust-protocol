@@ -8,6 +8,7 @@ Currently supported features are:
 - Receiving data
 - Closing stream with the FIN flag
 - Resetting streams
+- Read/Write trait for connections (could be used for example with [Rust OpenSSL bindings](https://docs.rs/openssl/latest/openssl/ssl/struct.SslConnector.html))
 
 Note that the only purpose of this implementation is to learn how a reliable protocol as TCP is built, and how we could design such a protocol in Rust.
 

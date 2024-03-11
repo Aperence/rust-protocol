@@ -1,7 +1,7 @@
 use crate::protocol::packets::Packet;
 use core::time;
 use std::collections::HashMap;
-use std::io::{Error, ErrorKind};
+use std::io::{Error, ErrorKind, Read, Write};
 use std::net::UdpSocket;
 use std::thread::{self, sleep};
 use std::sync::mpsc::{channel, Receiver, RecvError, Sender};
@@ -36,7 +36,51 @@ pub struct Connection{
     // sender for the data buffer
     buffer_sender : Sender<Vec<u8>>,
     // map of all connections, used to clean up when receiving fin
-    connections : Arc<Mutex<HashMap<String, Sender<Packet>>>>
+    connections : Arc<Mutex<HashMap<String, Sender<Packet>>>>,
+    current_block : Option<Arc<Vec<u8>>>
+}
+
+impl Read for Connection{
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if let Some(data) = self.current_block.clone(){
+            let len = buf.len();
+            let read_len;
+            if len >= data.len(){
+                read_len = data.len();
+                self.current_block = None;
+            }else{
+                read_len = len;
+            }
+            for i in 0..read_len{
+                buf[i] = data[i];
+            }
+            return Ok(data.len());
+        }
+        // try to get some data from the buffer if already available
+        if let Ok(data) = self.buffer.try_recv(){
+            self.current_block = Some(Arc::new(data));
+            return self.read(buf);
+        }
+        // loop until getting real data
+        while let Ok(false) = self.receive(None){}
+        if let Ok(data) = self.buffer.try_recv(){
+            self.current_block = Some(Arc::new(data));
+            return self.read(buf);
+        }
+        // no more data, end of stream
+        Ok(0)
+    }
+}
+
+impl Write for Connection{
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.send(buf.to_vec())?;
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
 }
 
 impl Connection{
@@ -46,7 +90,7 @@ impl Connection{
             ack, window : 4*(MAX_SIZE as u64), 
             in_flight : 0, socket, addr, receiver, 
             buffer : rx, buffer_sender : tx, received_fin : false, 
-            sent_fin : false, connections}
+            sent_fin : false, connections, current_block : None}
     }
 
     pub fn get_peer_addr(&self) -> String{

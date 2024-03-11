@@ -28,6 +28,12 @@ fn main() -> Result<(), std::io::Error>{
         thread::spawn(move ||{
             let peer = connection.get_peer_addr();
             let msg = connection.recv().unwrap();
+            // we can also use read for receiving
+            // ex: 
+            // let mut buf : [u8; 2560] = [0; 2560];
+            // let amt = connection.read(&mut buf).unwrap();
+            // let msg = buf[..amt].to_vec();
+
             println!("Client {} said : {}", peer, String::from_utf8(msg).unwrap());
 
             // first we greet each other, then wait for its query
