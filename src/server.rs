@@ -1,5 +1,5 @@
 use clap::Parser;
-use std::thread;
+use std::{sync::{Arc, Mutex}, thread::{self, sleep}, time::Duration};
 
 pub mod protocol;
 use protocol::Protocol;
@@ -21,11 +21,24 @@ fn main() -> Result<(), std::io::Error>{
     println!("Hello from server");
 
     let mut server = Protocol::new(&addr)?;
-
+    let number_syn = Arc::new(Mutex::new(0));
+    let failing_syns = Arc::new(vec![0, 4, 10]);
     loop{
         let mut connection = server.listen()?;
         // use one thread per connection
+ 
+        let j = number_syn.clone();
+        let f = failing_syns.clone();
         thread::spawn(move ||{
+            if f.contains(&*j.lock().unwrap()){
+                sleep(Duration::from_millis(200));
+            }
+            *j.lock().unwrap() += 1;
+            
+            let res = connection.accept();
+            if res.is_err(){
+                return;
+            }
             let peer = connection.get_peer_addr();
             let msg = connection.recv().unwrap();
             // we can also use read for receiving

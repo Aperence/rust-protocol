@@ -117,30 +117,20 @@ impl Protocol{
                 let (amt, src) = res.unwrap();
                 let received = Packet::from_bytes(buf[..amt].to_vec());
     
+
+                let addr = src.to_string();
                 if received.is_syn(){
                     // begin handshake by sending syn-ack
                     let seq = hash(&src); // use an hash to avoid syn flooding
-                    let synack = Packet::new_synack(seq, received.get_sequence()+1);
-                    let _ = sock.send_to(&synack.to_bytes(), src);
+                    let (tx, rx) = channel();
+                    let connection = Connection::new(seq, received.get_sequence(), sock.clone(), addr.clone(), rx, connections.clone());
+                    let _ = sender.send(connection);
+                    connections.clone().lock().unwrap().insert(addr, tx);
                     continue;
                 }
 
-                let addr = src.to_string();
-
                 if !connections.clone().lock().unwrap().contains_key(&addr){
-                    // finalize the handshake
-                    if !received.is_ack(){
-                        continue;
-                    }
-                    let hashed = hash(&src);
-                    if received.get_acked() != hashed + 1{
-                        continue;
-                    }
-                    //println!("Correct ack, creating connection");
-                    let (tx, rx) = channel();
-                    let connection = Connection::new(hashed+1, received.get_sequence(), sock.clone(), addr.clone(), rx, connections.clone());
-                    let _ = sender.send(connection);
-                    connections.clone().lock().unwrap().insert(addr, tx);
+                    continue;
                 }else{
                     // data packet/reset, serve to correct connection
                     let arc = connections.clone();

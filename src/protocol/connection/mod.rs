@@ -11,7 +11,9 @@ use std::time::Duration;
 
 pub const MAX_SIZE: usize = 2560;
 pub const MSL: Duration = Duration::from_secs(120);
+pub const RTO : Duration = Duration::from_millis(100);
 
+#[derive(Debug)]
 pub struct Connection{
     // address of other host
     addr : String,  
@@ -130,8 +132,7 @@ impl Connection{
                 self.send_packet(&content, init_sequence)?;
                 remaining = self.sequence + self.in_flight - init_sequence;
             }
-            let rto = Duration::from_millis(100);
-            let data = self.receive(Some(rto));
+            let data = self.receive(Some(RTO));
             if let Err(_) = data{
                 // rto reached
                 self.in_flight = 0;
@@ -234,8 +235,7 @@ impl Connection{
         loop {
             let fin = Packet::new_fin(self.sequence);
             self.socket.send_to(&fin.to_bytes(), self.addr.clone())?;
-            let rto = Duration::from_millis(100);
-            let data = self.receive(Some(rto));
+            let data = self.receive(Some(RTO));
             if let Err(_) = data{
                 self.sent_fin = true;
                 if self.received_fin{
@@ -255,6 +255,24 @@ impl Connection{
     pub fn reset(self) -> Result<(), std::io::Error>{
         let reset = Packet::new_reset(self.sequence);
         self.socket.send_to(&reset.to_bytes(), self.addr)?;
+        Ok(())
+    }
+
+    /**
+     * Accept an incoming connection
+     */
+    pub fn accept(&mut self) -> Result<(), std::io::Error>{
+        loop{
+            self.ack += 1;
+            let synack = Packet::new_synack(self.sequence, self.ack);
+            self.socket.send_to(&synack.to_bytes(), self.addr.clone())?;
+            self.in_flight += 1;
+            let not_ack = self.receive(Some(RTO))?;
+            if !not_ack{
+                break;
+            }
+        }
+        println!("Done connection {} {}", self.sequence, self.ack);
         Ok(())
     }
 }
